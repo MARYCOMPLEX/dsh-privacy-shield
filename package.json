@@ -3,6 +3,15 @@
   "version": "0.1.0",
   "description": "Official-seam privacy masking for DeepSeek Harness: toggleable secret/PII masking, a reversible vault, and safe execution tools.",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MARYCOMPLEX/dsh-privacy-shield.git"
+  },
+  "homepage": "https://github.com/MARYCOMPLEX/dsh-privacy-shield",
+  "bugs": {
+    "url": "https://github.com/MARYCOMPLEX/dsh-privacy-shield/issues"
+  },
+  "keywords": ["dsh", "deepseek-harness", "privacy", "security", "pii", "redaction", "vault", "plugin"],
   "license": "MIT",
   "engines": { "node": ">=22.13" },
   "main": "./dist/index.js",
@@ -14,6 +23,7 @@
   "dsh": { "bundle": { "patch": "./cordis.patch.yml" } },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "prepare": "npm run build",
     "test": "npm run build && node --test test/*.test.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

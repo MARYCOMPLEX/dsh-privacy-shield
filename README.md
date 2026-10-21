@@ -31,10 +31,14 @@ This plugin takes the other official route: **mask earlier, before the event is 
 
 ## Install
 
-### From this checkout (development)
+### From this repository
 
 ```sh
-dsh plugin --profile my add link:/root/dev/dsh-privacy-shield
+git clone https://github.com/MARYCOMPLEX/dsh-privacy-shield.git
+cd dsh-privacy-shield
+npm install
+npm run build
+dsh plugin --profile my add link:$PWD
 dsh --profile my
 ```
 
