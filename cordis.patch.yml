@@ -1,0 +1,18 @@
+# dsh-privacy-shield — official-seam privacy masking for DeepSeek Harness.
+#
+# The plugin uses only documented seams:
+#   - agent/pre-step        user messages before they enter the session log
+#   - tools/post-execute    tool results before they enter the session log
+#   - tools/pre-execute     deny normal tools that received a vault token
+#   - session-telemetry/record  redact the exported telemetry copy
+#
+# Toggle at runtime with /privacy on|off; the config below is the default.
+- insert:
+    - id: privacy-shield
+      name: dsh-privacy-shield
+      config:
+        enabled: true
+        mode: vault
+        maskToolResults: true
+        vault:
+          backend: file

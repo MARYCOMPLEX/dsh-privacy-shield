@@ -1,0 +1,29 @@
+{
+  "name": "dsh-privacy-shield",
+  "version": "0.1.0",
+  "description": "Official-seam privacy masking for DeepSeek Harness: toggleable secret/PII masking, a reversible vault, and safe execution tools.",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=22.13" },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
+  },
+  "files": ["dist", "cordis.patch.yml", "README.md", "LICENSE"],
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test test/*.test.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/schemastery": "^3.18.2"
+  },
+  "devDependencies": {
+    "@deepseek-ai/schemastery": "3.18.5",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}
