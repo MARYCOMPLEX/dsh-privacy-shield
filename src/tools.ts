@@ -71,7 +71,7 @@ export function registerSecureTools(ctx: PluginContext, state: ShieldState): () 
       makeTool(
         "secure_run",
         "Run a shell command with vault tokens resolved inside the command. " +
-          "Use this instead of bash when the command needs a value the model sees as {{LABEL_xxxxxx}}. " +
+          "Use this instead of bash when the command needs a value the model sees as a double-brace LABEL token. " +
           "stdout/stderr are masked again before they are returned.",
         {
           type: "object",
