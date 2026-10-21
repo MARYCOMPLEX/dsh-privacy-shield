@@ -42,6 +42,33 @@ function makeTool(
   };
 }
 
+const NETWORK_COMMAND_RE =
+  /(^|[;&|()\s])(?:curl|wget|nc|ncat|netcat|socat|ssh|scp|sftp|telnet|ftp|lftp|rsync|ping|dig|nslookup|host|openssl\s+s_client)(?=\s|$)/i;
+
+/** Returns a denial reason, or undefined when the command may run. */
+function checkRunPolicy(command: string, policy: { allowedCommands: readonly string[]; denyNetwork: boolean; blockedPatterns: readonly string[] }): string | undefined {
+  const trimmed = command.trim();
+  if (policy.denyNetwork && NETWORK_COMMAND_RE.test(trimmed)) {
+    return "network egress is disabled for secure_run (secureTools.run.denyNetwork)";
+  }
+  for (const pattern of policy.blockedPatterns) {
+    try {
+      if (new RegExp(pattern, "i").test(trimmed)) return `command matches blocked pattern ${JSON.stringify(pattern)}`;
+    } catch {
+      return `blocked pattern ${JSON.stringify(pattern)} is not a valid regex`;
+    }
+  }
+  if (policy.allowedCommands.length > 0) {
+    if (!policy.allowedCommands.some((prefix) => trimmed.startsWith(prefix))) {
+      return "command is not in secureTools.run.allowedCommands";
+    }
+    if (/[;&`]|\$\(|\|\|/.test(trimmed)) {
+      return "shell chaining is not allowed when secureTools.run.allowedCommands is set";
+    }
+  }
+  return undefined;
+}
+
 function hostAllowed(host: string, allowed: readonly string[]): boolean {
   if (allowed.length === 0) return true;
   const lower = host.toLowerCase();
@@ -106,6 +133,8 @@ export function registerSecureTools(ctx: PluginContext, state: ShieldState): () 
           } catch (error) {
             return errorValue(String(error instanceof Error ? error.message : error));
           }
+          const denial = checkRunPolicy(resolved, state.config.secureTools.run);
+          if (denial !== undefined) return errorValue(`secure_run denied: ${denial}`);
           const shell = ctx.get?.("shell");
           if (shell === undefined || typeof shell.resolve !== "function" || typeof shell.execute !== "function") {
             return errorValue("shell service is unavailable in this profile");

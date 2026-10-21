@@ -1,5 +1,6 @@
 import z from "@deepseek-ai/schemastery";
 import type { CustomRule, RuleFlags } from "./detect.js";
+import type { VaultEncryption } from "./vault.js";
 
 export interface ShieldConfig {
   /** Master switch; `/privacy on|off` overrides it per session at runtime. */
@@ -17,11 +18,21 @@ export interface ShieldConfig {
     readonly backend: "memory" | "file";
     /** Empty means `$DSH_HOME/privacy-shield/vault.json`. */
     readonly path: string;
+    /** `aes-256-gcm` (default) encrypts the file; `none` is for migration/debug only. */
+    readonly encryption: VaultEncryption;
   };
   readonly secureTools: {
     readonly enabled: boolean;
     /** Empty means any host is allowed; otherwise exact host or `*.suffix`. */
     readonly allowedHosts: readonly string[];
+    readonly run: {
+      /** Empty means any command; otherwise the command must start with one prefix. */
+      readonly allowedCommands: readonly string[];
+      /** Block common network clients in secure_run (default true). */
+      readonly denyNetwork: boolean;
+      /** Extra case-insensitive regexes that deny a command. */
+      readonly blockedPatterns: readonly string[];
+    };
   };
 }
 
@@ -43,8 +54,12 @@ export const DEFAULT_CONFIG: ShieldConfig = Object.freeze({
   }),
   customRules: Object.freeze([]),
   allowlist: Object.freeze([]),
-  vault: Object.freeze({ backend: "file", path: "" }),
-  secureTools: Object.freeze({ enabled: true, allowedHosts: Object.freeze([]) }),
+  vault: Object.freeze({ backend: "file", path: "", encryption: "aes-256-gcm" }),
+  secureTools: Object.freeze({
+    enabled: true,
+    allowedHosts: Object.freeze([]),
+    run: Object.freeze({ allowedCommands: Object.freeze([]), denyNetwork: true, blockedPatterns: Object.freeze([]) }),
+  }),
 });
 
 /** Schemastery schema for the DSH plugin config surface. */
@@ -74,12 +89,20 @@ export const Config = z.object({
     .object({
       backend: z.union(["memory", "file"]).default("file"),
       path: z.string().default(""),
+      encryption: z.union(["aes-256-gcm", "none"]).default("aes-256-gcm"),
     })
     .default({}),
   secureTools: z
     .object({
       enabled: z.boolean().default(true),
       allowedHosts: z.array(z.string()).default([]),
+      run: z
+        .object({
+          allowedCommands: z.array(z.string()).default([]),
+          denyNetwork: z.boolean().default(true),
+          blockedPatterns: z.array(z.string()).default([]),
+        })
+        .default({}),
     })
     .default({}),
 });
@@ -135,10 +158,22 @@ export function normalizeConfig(raw: unknown): ShieldConfig {
     vault: {
       backend: vault.backend === "memory" || vault.backend === "file" ? vault.backend : DEFAULT_CONFIG.vault.backend,
       path: typeof vault.path === "string" ? vault.path : DEFAULT_CONFIG.vault.path,
+      encryption:
+        vault.encryption === "aes-256-gcm" || vault.encryption === "none"
+          ? vault.encryption
+          : DEFAULT_CONFIG.vault.encryption,
     },
     secureTools: {
       enabled: bool(secure.enabled, DEFAULT_CONFIG.secureTools.enabled),
       allowedHosts: list(secure.allowedHosts),
+      run: (() => {
+        const run = asRecord(secure.run);
+        return {
+          allowedCommands: list(run.allowedCommands),
+          denyNetwork: bool(run.denyNetwork, DEFAULT_CONFIG.secureTools.run.denyNetwork),
+          blockedPatterns: list(run.blockedPatterns),
+        };
+      })(),
     },
   };
 }

@@ -106,6 +106,40 @@ test("secure_read masks file content and secure_edit resolves old/new text", asy
   assert.equal(editResult.path, "notes.txt");
 });
 
+test("secure_run denies network clients and enforces allowedCommands", async () => {
+  const shell = fakeShell();
+  const ctx = makeCtx({ shell });
+  const { state } = await makeState();
+  registerSecureTools(ctx, state);
+  const tool = ctx.registeredTools.get("secure_run");
+  assert.ok(tool);
+
+  const network = await tool.execute({ command: "curl https://example.com/secret" }, { signal });
+  assert.match(network.error, /network egress is disabled/);
+  assert.equal(shell.calls.length, 0);
+
+  const allowCtx = makeCtx({ shell: fakeShell() });
+  const allowed = await makeState({ secureTools: { run: { allowedCommands: ["printf"], denyNetwork: true } } });
+  registerSecureTools(allowCtx, allowed.state);
+  const restricted = allowCtx.registeredTools.get("secure_run");
+  const denied = await restricted.execute({ command: "echo hello" }, { signal });
+  assert.match(denied.error, /allowedCommands/);
+  const chained = await restricted.execute({ command: "printf x; echo y" }, { signal });
+  assert.match(chained.error, /shell chaining/);
+});
+
+test("secure_run applies custom blockedPatterns", async () => {
+  const shell = fakeShell();
+  const ctx = makeCtx({ shell });
+  const { state } = await makeState({ secureTools: { run: { denyNetwork: false, blockedPatterns: ["secret"] } } });
+  registerSecureTools(ctx, state);
+  const tool = ctx.registeredTools.get("secure_run");
+  assert.ok(tool);
+  const denied = await tool.execute({ command: "printf secret" }, { signal });
+  assert.match(denied.error, /blocked pattern/);
+  assert.equal(shell.calls.length, 0);
+});
+
 test("secure_request enforces the host allowlist before network access", async () => {
   const ctx = makeCtx();
   const { state, vault } = await makeState({ secureTools: { enabled: true, allowedHosts: ["api.example"] } });

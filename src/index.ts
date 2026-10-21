@@ -61,7 +61,16 @@ export async function apply(ctx: PluginContext, rawConfig?: unknown): Promise<vo
       );
     }
   }
-  const vault = await openVault(config.vault.backend, config.vault.path || defaultVaultPath());
+  for (const pattern of config.secureTools.run.blockedPatterns) {
+    try {
+      new RegExp(pattern, "i");
+    } catch (error) {
+      throw new Error(
+        `privacy-shield: invalid secureTools.run.blockedPatterns entry ${JSON.stringify(pattern)}: ${String(error instanceof Error ? error.message : error)}`,
+      );
+    }
+  }
+  const vault = await openVault(config.vault.backend, config.vault.path || defaultVaultPath(), config.vault.encryption);
   const state = new ShieldState(config, vault);
 
   const disposeHooks = registerHooks(ctx, state);

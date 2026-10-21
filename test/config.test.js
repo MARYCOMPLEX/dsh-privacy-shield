@@ -16,7 +16,9 @@ test("normalizes defaults and nested overrides", () => {
   assert.equal(cfg.rules.ipPrivate, true);
   assert.equal(cfg.rules.email, true);
   assert.equal(cfg.vault.backend, "memory");
+  assert.equal(cfg.vault.encryption, "aes-256-gcm");
   assert.deepEqual(cfg.secureTools.allowedHosts, ["api.example.com"]);
+  assert.equal(cfg.secureTools.run.denyNetwork, true);
 });
 
 test("falls back on invalid enum values and ignores malformed rules", () => {

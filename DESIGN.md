@@ -103,9 +103,9 @@ A future projection layer could make "on" cover the model view of history withou
 ### Out of scope
 
 - **The raw `agent/inbox/spliced` audit event.** DSH appends the user input before `agent/pre-step`; the `user/message` and request are masked, but the raw inbox event remains in the session file. This is a known official-seam gap.
-- A local attacker with the same UID: the file vault is plaintext `0600`; the process memory is readable.
+- A local attacker with the same UID: the vault is AES-256-GCM encrypted, but the key is a `0600` file next to it; the process memory is readable.
 - Model prior knowledge or hallucinated secrets.
-- A tool's own side effects: `secure_run` can run `curl`; `secure_request` can POST a resolved value to an allowlisted host. Masking input is not an egress firewall.
+- A tool's own side effects: `secure_run` has a best-effort `denyNetwork` / `allowedCommands` / `blockedPatterns` guard, but an interpreter can still make network calls; `secure_request` can POST a resolved value to an allowlisted host. Masking input is not an egress firewall.
 - Metadata: token shapes, counts, timing, and which label was used still leak.
 - Secrets in the system prompt, AGENTS.md, skill files, or tool descriptions.
 - A compromised DSH runtime or a malicious plugin in the same process.
@@ -129,27 +129,29 @@ A future projection layer could make "on" cover the model view of history withou
 
 ## Future work
 
-### 1. Model-only projection (official)
+### 1. Model-only projection (official) — blocked on a core seam
 
-Desired: append-only transcript keeps real values; model sees masks. Candidate implementation:
+Desired: append-only transcript keeps real values; model sees masks. The official mechanism is `SessionMessageProjection`, but the timing is the blocker:
 
-- A durable plugin event (e.g. `privacy-shield/mask`) carrying the token→value mapping or a digest.
-- A `SessionMessageProjection` that returns masked replacements for the model-visible surface only.
-- A supported way to append the projection before `buildRequest` for the current step's messages. If that requires a new core seam, propose it rather than re-dispatching at `llm/stream`.
+- `agent/pre-step` runs before the step's `user/message` and `tool/result` are committed; a projection event appended there cannot target those future sequences.
+- `agent/request` also runs before the commit.
+- `session/event` is post-commit, but `Session.append` refuses a reentrant append while another append is publishing.
+- `session/flush` is called by the checkpoint policy just before adapter dispatch — too late; the request has already been built.
+- Appending per-message projection events from a plugin also risks the log loader rejecting an out-of-tree event type on resume.
 
-Until then, this plugin does not claim "logs keep truth".
+A clean implementation needs a supported append point between the commit and `buildRequest` (or a core request-projection hook). Until then, this plugin does not claim "logs keep truth".
 
 ### 2. Client display restore
 
 A web client plugin can resolve tokens only in the rendered UI, leaving the log/model text masked. This is display-only and must not write the resolved value back into session events.
 
-### 3. Encrypted vault
+### 3. Encrypted vault — implemented
 
-AES-256-GCM with a key file `0600`, or an OS keychain. The current file vault is permission-only; encryption protects backups/casual reads, not same-UID access.
+AES-256-GCM with a random 32-byte key file `0600`. It protects backups/casual reads, not same-UID access. A future OS-keychain backend would move the key out of the vault directory.
 
-### 4. Egress policy
+### 4. Egress policy — best-effort implemented
 
-Command/URL allowlists for `secure_run`, or making `secure_request` the only network path. This is the difference between "the model cannot see the secret" and "the secret cannot leave".
+A command guard for `secure_run` (`denyNetwork`, `allowedCommands`, `blockedPatterns`) plus the host allowlist on `secure_request`. A real boundary needs a network namespace/proxy, or making `secure_request` the only egress path.
 
 ## Alternatives considered
 
