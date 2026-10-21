@@ -29,14 +29,14 @@ function makeTool(
   name: string,
   description: string,
   parameters: Record<string, unknown>,
-  execute: (args: Record<string, unknown>, exec: { signal: AbortSignal }) => Promise<unknown>,
+  execute: (args: Record<string, unknown>, exec: any) => Promise<unknown>,
 ): Record<string, unknown> {
   return {
     name,
     description,
     parameters,
     output: output(description),
-    async execute(args: unknown, exec: { signal: AbortSignal }) {
+    async execute(args: unknown, exec: any) {
       return execute(asRecord(args), exec);
     },
   };
@@ -58,7 +58,21 @@ function toolResult(value: unknown): unknown {
 }
 
 /**
- * Register the three capability tools that can resolve vault tokens inside
+ * Resolve the per-call filesystem sandbox policy the same way the built-in
+ * write/edit tools do. A confining backend needs it to place its atomic
+ * temporary file on the workspace's device; omitting it can produce EXDEV.
+ */
+function sandboxPolicyFor(ctx: PluginContext, exec: any): unknown {
+  try {
+    const service = ctx.get?.("sandboxPolicy");
+    return service?.resolve?.({ session: exec?.agent?.session });
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Register the five capability tools that can resolve vault tokens inside
  * their own execution. The model never receives the resolved value: outputs
  * are masked again before they become a tool result.
  */
@@ -136,7 +150,7 @@ export function registerSecureTools(ctx: PluginContext, state: ShieldState): () 
           },
           required: ["path", "content"],
         },
-        async (args) => {
+        async (args, exec) => {
           const path = asString(args.path);
           const content = asString(args.content);
           if (path === undefined || path === "") return errorValue("path is required");
@@ -153,10 +167,102 @@ export function registerSecureTools(ctx: PluginContext, state: ShieldState): () 
           }
           try {
             const target = await fs.resolve(path);
-            await fs.writeText(target, resolved);
+            const policy = sandboxPolicyFor(ctx, exec);
+            await fs.writeText(target, resolved, undefined, exec.signal, policy);
             return toolResult({ path, bytes: Buffer.byteLength(resolved, "utf8") });
           } catch (error) {
             return errorValue(`secure_write failed: ${String(error instanceof Error ? error.message : error)}`);
+          }
+        },
+      ),
+    ),
+  );
+
+
+  disposers.push(
+    ctx.tools.register(
+      makeTool(
+        "secure_read",
+        "Read a text file and mask any sensitive values in the returned content. " +
+          "Use this instead of read when the file may contain secrets or PII; the model receives tokens, not raw values.",
+        {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            path: { type: "string", description: "File path in the active filesystem." },
+          },
+          required: ["path"],
+        },
+        async (args, exec) => {
+          const path = asString(args.path);
+          if (path === undefined || path === "") return errorValue("path is required");
+          const fs = ctx.get?.("fs");
+          if (fs === undefined || typeof fs.resolve !== "function" || typeof fs.readText !== "function") {
+            return errorValue("filesystem service is unavailable in this profile");
+          }
+          try {
+            const target = await fs.resolve(path);
+            const raw = await fs.readText(target, exec.signal);
+            const content = await maskText(String(raw), state.config, state.vault);
+            return toolResult({ path, content });
+          } catch (error) {
+            return errorValue(`secure_read failed: ${String(error instanceof Error ? error.message : error)}`);
+          }
+        },
+      ),
+    ),
+  );
+
+  disposers.push(
+    ctx.tools.register(
+      makeTool(
+        "secure_edit",
+        "Edit a text file with vault tokens resolved inside old_string and new_string. " +
+          "Use this instead of edit when the literal text contains a double-brace LABEL token. " +
+          "The tool returns only the path and byte count.",
+        {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            path: { type: "string", description: "File path in the active filesystem." },
+            old_string: { type: "string", description: "Literal text to replace; may contain vault tokens." },
+            new_string: { type: "string", description: "Replacement text; may contain vault tokens." },
+            replace_all: { type: "boolean", description: "Replace every match instead of requiring exactly one." },
+          },
+          required: ["path", "old_string", "new_string"],
+        },
+        async (args, exec) => {
+          const path = asString(args.path);
+          const oldString = asString(args.old_string);
+          const newString = asString(args.new_string);
+          if (path === undefined || path === "") return errorValue("path is required");
+          if (oldString === undefined || oldString === "") return errorValue("old_string is required");
+          if (newString === undefined) return errorValue("new_string is required");
+          let resolvedOld: string;
+          let resolvedNew: string;
+          try {
+            resolvedOld = state.vault.substitute(oldString);
+            resolvedNew = state.vault.substitute(newString);
+          } catch (error) {
+            return errorValue(String(error instanceof Error ? error.message : error));
+          }
+          const fs = ctx.get?.("fs");
+          if (fs === undefined || typeof fs.resolve !== "function" || typeof fs.editText !== "function") {
+            return errorValue("filesystem service is unavailable in this profile");
+          }
+          try {
+            const target = await fs.resolve(path);
+            const policy = sandboxPolicyFor(ctx, exec);
+            await fs.editText(
+              target,
+              { oldString: resolvedOld, newString: resolvedNew, replaceAll: args.replace_all === true },
+              undefined,
+              exec.signal,
+              policy,
+            );
+            return toolResult({ path, bytes: Buffer.byteLength(resolvedNew, "utf8") });
+          } catch (error) {
+            return errorValue(`secure_edit failed: ${String(error instanceof Error ? error.message : error)}`);
           }
         },
       ),

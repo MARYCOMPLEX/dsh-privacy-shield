@@ -9,6 +9,8 @@ test("apply wires hooks, command, secure tools, and the guidance section", async
   assert.equal(ctx.registeredCommands.length, 1);
   assert.equal(ctx.registeredCommands[0].name, "privacy");
   assert.ok(ctx.registeredTools.has("secure_run"));
+  assert.ok(ctx.registeredTools.has("secure_read"));
+  assert.ok(ctx.registeredTools.has("secure_edit"));
   assert.ok(ctx.registeredTools.has("secure_write"));
   assert.ok(ctx.registeredTools.has("secure_request"));
   assert.equal(ctx.promptSections.length, 1);

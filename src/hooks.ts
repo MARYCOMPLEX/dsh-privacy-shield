@@ -3,7 +3,7 @@ import { maskContentBlocks, maskJsonValue, maskJsonValueSync, maskMessage, conta
 import type { ShieldState } from "./state.js";
 
 /** Tools that are allowed to receive tokens because they resolve them internally. */
-export const SECURE_TOOL_NAMES = new Set(["secure_run", "secure_write", "secure_request"]);
+export const SECURE_TOOL_NAMES = new Set(["secure_run", "secure_write", "secure_read", "secure_edit", "secure_request"]);
 
 function sessionIdOfAgent(agent: { session?: { id?: string } } | undefined): string | undefined {
   const id = agent?.session?.id;

@@ -69,6 +69,43 @@ test("secure_write resolves a token in content and does not return it", async ()
   assert.ok(!JSON.stringify(result).includes("13800138000"));
 });
 
+test("secure_read masks file content and secure_edit resolves old/new text", async () => {
+  const reads = [];
+  const edits = [];
+  const fs = {
+    async resolve(path) {
+      return { path };
+    },
+    async readText() {
+      return "phone=13800138000\n";
+    },
+    async editText(target, request) {
+      edits.push({ target, request });
+      return { before: "", after: "" };
+    },
+  };
+  const ctx = makeCtx({ fs });
+  const { state, vault } = await makeState();
+  registerSecureTools(ctx, state);
+  const read = ctx.registeredTools.get("secure_read");
+  const edit = ctx.registeredTools.get("secure_edit");
+  assert.ok(read);
+  assert.ok(edit);
+
+  const readResult = await read.execute({ path: "notes.txt" }, { signal });
+  assert.match(readResult.content, /\{\{PHONE_[a-z2-7]{6}\}\}/);
+  assert.ok(!readResult.content.includes("13800138000"));
+
+  const token = await vault.store("13800138000", "PHONE");
+  const editResult = await edit.execute(
+    { path: "notes.txt", old_string: `phone=${token}`, new_string: `phone=${token}\n` },
+    { signal },
+  );
+  assert.equal(edits[0].request.oldString, "phone=13800138000");
+  assert.equal(edits[0].request.newString, "phone=13800138000\n");
+  assert.equal(editResult.path, "notes.txt");
+});
+
 test("secure_request enforces the host allowlist before network access", async () => {
   const ctx = makeCtx();
   const { state, vault } = await makeState({ secureTools: { enabled: true, allowedHosts: ["api.example"] } });

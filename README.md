@@ -2,7 +2,7 @@
 
 **Official-seam, toggleable privacy masking for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).**
 
-Sensitive values are replaced with vault tokens **before they become model-visible messages and tool results**. The model sees `{{PHONE_ab12cd}}`; the local vault keeps the real value; `secure_run` / `secure_write` / `secure_request` resolve it inside the tool and mask their output again.
+Sensitive values are replaced with vault tokens **before they become model-visible messages and tool results**. The model sees `{{PHONE_ab12cd}}`; the local vault keeps the real value; `secure_run` / `secure_write` / `secure_read` / `secure_edit` / `secure_request` resolve it inside the tool and mask their output again.
 
 > **Important log caveat:** DSH writes the raw user input to an `agent/inbox/spliced` audit event *before* `agent/pre-step` runs. The `user/message` event and the model request are masked, but that earlier inbox event still contains the original text. Do not export or share a raw session file if this matters. See [Known gaps](#known-gaps).
 
@@ -17,7 +17,7 @@ The plugin deliberately uses only documented DSH extension points:
 
 It does **not** wrap `llm/stream`, does not re-dispatch requests, and does not need a proxy or a fork. That keeps DSH's "model-visible ⇔ logged" invariant: the log and the model see the same masked text.
 
-> **Status:** MVP, 26 unit tests, DSH `0.2.x` seams. Not yet published to npm.
+> **Status:** MVP, 28 unit tests, DSH `0.2.x` seams. Not yet published to npm.
 
 ---
 
@@ -105,6 +105,7 @@ A user-level `cordis.patch.yml` can replace the row's whole config:
 | `/privacy on` | Re-enable for the current session. **Existing history is not retroactively masked**; only new content is. |
 | `/privacy global on` / `off` | Change the process-wide default (in memory; session overrides still win). |
 | `/privacy test` | Run the local sentinel through the detector; no network. |
+| `/privacy demo` | Print a synthetic user-message → tool-call → decode chain. |
 
 The config `enabled` is the startup default. `/privacy on|off` is a per-session override that lives until the process exits.
 
@@ -152,7 +153,7 @@ DSH has no supported hook that can rewrite already-committed messages. If a sess
 
 ## Capability tools
 
-The model cannot pass a token to a normal tool: `tools/pre-execute` denies it with guidance. Three tools resolve tokens inside their own body.
+The model cannot pass a token to a normal tool: `tools/pre-execute` denies it with guidance. Five tools resolve tokens inside their own body.
 
 ### `secure_run`
 
@@ -174,6 +175,31 @@ The model cannot pass a token to a normal tool: `tools/pre-execute` denies it wi
 - Resolves tokens in `content`.
 - Uses `ctx.fs` (the profile's filesystem backend), so it respects the same workspace/sandbox policy as `write`.
 - Returns only `{ path, bytes }`; the real content is never echoed.
+
+### `secure_read`
+
+```json
+{ "path": "config/.env" }
+```
+
+- Reads through `ctx.fs` and masks every detected value before returning the content.
+- Useful for reading a `.env` or config that contains secrets without putting the real values into the model context.
+- Returns `{ path, content }` with tokens, or `{ error }`.
+
+### `secure_edit`
+
+```json
+{
+  "path": "config/.env",
+  "old_string": "API_KEY=old-value",
+  "new_string": "API_KEY={{API_KEY_ab12cd}}",
+  "replace_all": false
+}
+```
+
+- Resolves tokens in both `old_string` and `new_string`.
+- Edits through `ctx.fs.editText`, so the same workspace/sandbox policy as `edit` applies.
+- Returns only `{ path, bytes }`; the real values are never echoed.
 
 ### `secure_request`
 
@@ -238,17 +264,21 @@ There is no single existing plugin that combines **official-only seams**, **a ru
 
 ---
 
+## The chain, with actual examples
+
+See [CHAIN.md](./CHAIN.md) for a real DSH `0.2.1-rc.2` run: the exact `agent/inbox/spliced` caveat, the `user/message` token, the `assistant/message` tool call, `tool/call`, vault resolution, `tool/result`, and the next request — with the raw phone number absent from every provider request.
+
 ## Verification
 
-- `npm test`: 26 unit tests (detection, validators, vault persistence, hooks, toggle, command, secure tools, entry wiring).
-- DSH `0.2.1-rc.2` headless smoke test with a local OpenAI-compatible endpoint: the captured `/v1/chat/completions` body contained `{{PHONE_...}}` and **not** the raw number; `secure_run`, `secure_write`, and `secure_request` appeared in the request's tool list. The same test exposed the `agent/inbox/spliced` raw-input caveat above.
+- `npm test`: 28 unit tests (detection, validators, vault persistence, hooks, toggle, command, secure tools, entry wiring).
+- DSH `0.2.1-rc.2` headless smoke test with a local OpenAI-compatible endpoint: the captured `/v1/chat/completions` body contained `{{PHONE_...}}` and **not** the raw number; `secure_run`, `secure_write`, `secure_read`, `secure_edit`, and `secure_request` appeared in the request's tool list. The same test exposed the `agent/inbox/spliced` raw-input caveat above.
 
 ## Development
 
 ```sh
 npm install
 npm run build
-npm test          # builds, then 26 unit tests
+npm test          # builds, then 28 unit tests
 npm run typecheck
 ```
 
@@ -265,7 +295,7 @@ src/
   state.ts        toggle + counters
   hooks.ts        official seam listeners
   command.ts      /privacy
-  tools.ts        secure_run / secure_write / secure_request
+  tools.ts        secure_run / secure_write / secure_read / secure_edit / secure_request
   types.ts        minimal structural DSH types
 ```
 

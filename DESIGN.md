@@ -50,7 +50,7 @@ model output (tokens; assistant/message tokens)
    │
    ├─ normal tool call containing a token ──► tools/pre-execute denies
    │
-   └─ secure_run / secure_write / secure_request
+   └─ secure_run / secure_write / secure_read / secure_edit / secure_request
           │ resolve tokens from the local vault
           ▼
        execute with real value
@@ -74,6 +74,8 @@ tools/post-execute ── mask result ──► tool/result (tokens)
 
 - `secure_run` resolves the command and executes through `ctx.shell`.
 - `secure_write` resolves the content and writes through `ctx.fs`.
+- `secure_read` reads through `ctx.fs` and masks the returned content.
+- `secure_edit` resolves both sides of a literal edit and writes through `ctx.fs`.
 - `secure_request` resolves URL/headers/body and fetches with a host allowlist.
 
 This is the same design family as `dsh-redact` and other vault plugins, with two additions: the pre-execute denial/guidance and the host-allowlisted HTTP path.
