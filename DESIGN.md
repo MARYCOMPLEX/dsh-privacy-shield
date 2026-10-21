@@ -63,7 +63,7 @@ tools/post-execute ── mask result ──► tool/result (tokens)
 
 | Seam | Direction | Why here |
 |---|---|---|
-| `agent/pre-step` | user → log/model | The decision's `messages` are what the loop appends. Masking here protects both readers at once. |
+| `agent/pre-step` | user → log/model | The decision's `messages` are what the loop appends. Masking here protects the `user/message` and the request. The earlier `agent/inbox/spliced` audit event is already committed and is not rewritten. |
 | `tools/post-execute` | tool → log/model | The accept decision can replace canonical `value` or rendered `content` before materialization. |
 | `tools/pre-execute` | guard | The seam cannot rewrite arguments, but it can deny. Denying a token-bearing normal tool prevents silent placeholder execution and points the model at the capability tools. |
 | `session-telemetry/record` | telemetry | Independent outbound copy; one-way redaction is enough and avoids vault writes. |
@@ -100,6 +100,7 @@ A future projection layer could make "on" cover the model view of history withou
 
 ### Out of scope
 
+- **The raw `agent/inbox/spliced` audit event.** DSH appends the user input before `agent/pre-step`; the `user/message` and request are masked, but the raw inbox event remains in the session file. This is a known official-seam gap.
 - A local attacker with the same UID: the file vault is plaintext `0600`; the process memory is readable.
 - Model prior knowledge or hallucinated secrets.
 - A tool's own side effects: `secure_run` can run `curl`; `secure_request` can POST a resolved value to an allowlisted host. Masking input is not an egress firewall.

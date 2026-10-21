@@ -94,6 +94,11 @@ export class Vault {
     return this.byToken.get(token)?.value;
   }
 
+  /** Whether this exact token is known to the vault. */
+  has(token: string): boolean {
+    return this.byToken.has(token);
+  }
+
   /** Replace every known token; unknown tokens are left untouched. */
   restore(text: string): string {
     return text.replace(TOKEN_RE, (token) => this.resolve(token) ?? token);

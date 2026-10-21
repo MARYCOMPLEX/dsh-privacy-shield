@@ -2,7 +2,9 @@
 
 **Official-seam, toggleable privacy masking for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).**
 
-Sensitive values are replaced with vault tokens **before they enter the session log and before they reach the model**. The model sees `{{PHONE_ab12cd}}`; the local vault keeps the real value; `secure_run` / `secure_write` / `secure_request` resolve it inside the tool and mask their output again.
+Sensitive values are replaced with vault tokens **before they become model-visible messages and tool results**. The model sees `{{PHONE_ab12cd}}`; the local vault keeps the real value; `secure_run` / `secure_write` / `secure_request` resolve it inside the tool and mask their output again.
+
+> **Important log caveat:** DSH writes the raw user input to an `agent/inbox/spliced` audit event *before* `agent/pre-step` runs. The `user/message` event and the model request are masked, but that earlier inbox event still contains the original text. Do not export or share a raw session file if this matters. See [Known gaps](#known-gaps).
 
 The plugin deliberately uses only documented DSH extension points:
 
@@ -112,7 +114,7 @@ DSH has no supported hook that can rewrite already-committed messages. If a sess
 
 ### User messages
 
-`agent/pre-step` masks every text/reasoning block (and tool-result content, if a caller supplies one) before the message is appended. The session log stores tokens.
+`agent/pre-step` masks every text/reasoning block (and tool-result content, if a caller supplies one) before the `user/message` is appended. The `user/message` event stores tokens. The earlier `agent/inbox/spliced` audit event is outside this seam and may still contain the raw input.
 
 ### Tool results
 
@@ -126,6 +128,7 @@ DSH has no supported hook that can rewrite already-committed messages. If a sess
 
 - **Assistant text invented by the model.** If the model writes a real secret it already knows, no seam sees it before it is logged. The plugin masks the *inputs* it controls, not model prior knowledge.
 - **System prompt / AGENTS.md / tool descriptions.** DSH exposes additive `systemPrompt.section`, not a prompt transform. Do not put secrets in those files.
+- **The raw `agent/inbox/spliced` event.** DSH appends the user input to this audit event before `agent/pre-step` can rewrite it. The model-visible `user/message` is masked, but the raw inbox event remains in the session file. A future session-export sanitizer or an input-admission hook is needed to close this.
 - **One-shot calls outside the agent loop** (some title/compaction/auxiliary calls) are not covered by `agent/pre-step` / `tools/post-execute`. If they carry masked session content, they carry tokens, which is safe; if they read an external source directly, they are outside this plugin.
 - **Tool side effects.** A secret can still leave through a command or HTTP request. `secure_request` has a host allowlist; `secure_run` does not have a command-level egress policy. Treat `secure_run` as "the agent can run code with the real value" — because it can.
 
@@ -211,6 +214,15 @@ Validators reject malformed candidates so the plugin does not mask every 16-digi
 
 ---
 
+## Known gaps
+
+1. **`agent/inbox/spliced` keeps the raw user input.** The official pre-step seam runs after this audit event is appended. The model never sees the raw text (the `user/message` is masked), but a raw session export can. This is the same gap documented by `dsh-secret-scrub`.
+2. **Assistant text invented by the model** is not masked; only inputs are.
+3. **System prompt / AGENTS.md / tool descriptions** are not transformed; do not put secrets there.
+4. **The human UI shows tokens.** There is no display-restore plugin in this release.
+5. **`secure_run` is arbitrary code execution with the real value.** It can exfiltrate; the plugin is not an egress firewall.
+6. **The file vault is plaintext 0600.** Same-UID processes can read it.
+
 ## Relationship to other DSH privacy plugins
 
 - `dsh-redact` / `dsh-secret-scrub`: admission-time masking with a vault/capability tools. This plugin adds a per-session toggle, a token-argument guard, and a host-allowlisted `secure_request`; it does not restore assistant display either.
@@ -221,6 +233,11 @@ Validators reject malformed candidates so the plugin does not mask every 16-digi
 There is no single existing plugin that combines **official-only seams**, **a runtime toggle**, **arbitrary tool execution via capability tools**, and **a token guard**. This is an attempt at that combination.
 
 ---
+
+## Verification
+
+- `npm test`: 26 unit tests (detection, validators, vault persistence, hooks, toggle, command, secure tools, entry wiring).
+- DSH `0.2.1-rc.2` headless smoke test with a local OpenAI-compatible endpoint: the captured `/v1/chat/completions` body contained `{{PHONE_...}}` and **not** the raw number; `secure_run`, `secure_write`, and `secure_request` appeared in the request's tool list. The same test exposed the `agent/inbox/spliced` raw-input caveat above.
 
 ## Development
 

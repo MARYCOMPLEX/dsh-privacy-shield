@@ -1,5 +1,5 @@
 import type { PluginContext, PostToolDecision, PreStepDecision, PreToolDecision, TelemetryRecord, ToolExecution, ToolExecutionResult } from "./types.js";
-import { maskContentBlocks, maskJsonValue, maskJsonValueSync, maskMessage, containsTokenDeep } from "./mask.js";
+import { maskContentBlocks, maskJsonValue, maskJsonValueSync, maskMessage, containsKnownTokenDeep } from "./mask.js";
 import type { ShieldState } from "./state.js";
 
 /** Tools that are allowed to receive tokens because they resolve them internally. */
@@ -88,10 +88,8 @@ export function registerToolPre(ctx: PluginContext, state: ShieldState): () => v
   return ctx.on(
     "tools/pre-execute",
     async (exec: ToolExecution, next: () => Promise<PreToolDecision>): Promise<PreToolDecision> => {
-      const sessionId = sessionIdOfAgent(exec.agent);
-      if (!state.isEnabled(sessionId)) return next();
       if (SECURE_TOOL_NAMES.has(exec.name)) return next();
-      if (!containsTokenDeep(exec.arguments)) return next();
+      if (!containsKnownTokenDeep(exec.arguments, state.vault)) return next();
       return {
         kind: "deny",
         reason:

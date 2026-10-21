@@ -98,8 +98,8 @@ export function handlePrivacyCommand(rawInput: string, sessionId: string | undef
       renderStats("this session", sessionStats),
       renderStats("since load", totals),
       `sessions tracked: ${state.sessionsTracked}; overrides: ${state.overrideCount}`,
-      "policy: user messages + tool results are masked before they enter the log; secure_run/secure_write/secure_request resolve tokens.",
-      "known gaps: assistant text invented by the model, system prompt/AGENTS.md content, and one-shot calls outside the agent loop are not masked.",
+      "policy: user messages + tool results are masked before they become model-visible events; secure_run/secure_write/secure_request resolve tokens.",
+      "known gaps: raw agent/inbox/spliced keeps the original user input; assistant text invented by the model, system prompt/AGENTS.md content, and one-shot calls outside the agent loop are not masked.",
     ].join("\n"),
   };
 }

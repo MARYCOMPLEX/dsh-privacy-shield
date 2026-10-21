@@ -38,7 +38,7 @@ export const name = "privacy-shield";
 
 const GUIDANCE = [
   "Privacy Shield is active for this conversation.",
-  "Sensitive values are replaced with tokens such as {{PHONE_ab12cd}} before they reach you or the session log.",
+  "Sensitive values are replaced with tokens such as PHONE_ab12cd wrapped in double braces before they reach you or the session log.",
   "Tokens are opaque references to real local values. Reproduce them verbatim: never invent, guess, split, complete, or decode a token.",
   "When a shell command, file, or HTTP request needs the underlying value, use secure_run, secure_write, or secure_request.",
   "Those tools resolve tokens inside the tool and mask their output again. Normal tools that receive a token are denied.",

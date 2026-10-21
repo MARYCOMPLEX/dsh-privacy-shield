@@ -77,10 +77,11 @@ test("tool-pre denies normal tools carrying a token and allows secure tools", as
   const ctx = makeCtx();
   const { state } = await makeState();
   registerHooks(ctx, state);
+  const token = await state.vault.store("13800138000", "PHONE");
 
   const denied = await ctx.dispatch(
     "tools/pre-execute",
-    [exec("bash", { command: "echo {{PHONE_abcdef}}" })],
+    [exec("bash", { command: `echo ${token}` })],
     async () => ({ kind: "allow" }),
   );
   assert.equal(denied.kind, "deny");
@@ -88,10 +89,19 @@ test("tool-pre denies normal tools carrying a token and allows secure tools", as
 
   const allowed = await ctx.dispatch(
     "tools/pre-execute",
-    [exec("secure_run", { command: "echo {{PHONE_abcdef}}" })],
+    [exec("secure_run", { command: `echo ${token}` })],
     async () => ({ kind: "allow" }),
   );
   assert.equal(allowed.kind, "allow");
+
+  // Turning masking off does not make an existing token safe to execute.
+  state.setSessionEnabled("s1", false);
+  const stillDenied = await ctx.dispatch(
+    "tools/pre-execute",
+    [exec("bash", { command: `echo ${token}` })],
+    async () => ({ kind: "allow" }),
+  );
+  assert.equal(stillDenied.kind, "deny");
 });
 
 test("telemetry masks its body and can be switched off", async () => {

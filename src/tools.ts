@@ -77,7 +77,7 @@ export function registerSecureTools(ctx: PluginContext, state: ShieldState): () 
           type: "object",
           additionalProperties: false,
           properties: {
-            command: { type: "string", description: "Shell command; may contain {{LABEL_xxxxxx}} tokens." },
+            command: { type: "string", description: "Shell command; may contain double-brace vault tokens." },
             workdir: { type: "string", description: "Working directory override." },
             timeout_ms: { type: "integer", minimum: 1, maximum: 600000, description: "Timeout in milliseconds." },
           },
@@ -125,14 +125,14 @@ export function registerSecureTools(ctx: PluginContext, state: ShieldState): () 
       makeTool(
         "secure_write",
         "Write a file with vault tokens resolved inside the content. " +
-          "Use this instead of write when the content needs a value the model sees as {{LABEL_xxxxxx}}. " +
+          "Use this instead of write when the content needs a value the model sees as a double-brace LABEL token. " +
           "The tool returns only the path and byte count.",
         {
           type: "object",
           additionalProperties: false,
           properties: {
             path: { type: "string", description: "Destination path in the active filesystem." },
-            content: { type: "string", description: "File content; may contain {{LABEL_xxxxxx}} tokens." },
+            content: { type: "string", description: "File content; may contain double-brace vault tokens." },
           },
           required: ["path", "content"],
         },
@@ -168,7 +168,7 @@ export function registerSecureTools(ctx: PluginContext, state: ShieldState): () 
       makeTool(
         "secure_request",
         "Perform one HTTP request with vault tokens resolved inside the URL, headers, and body. " +
-          "Use this instead of a generic HTTP tool when a header or body needs a value the model sees as {{LABEL_xxxxxx}}. " +
+          "Use this instead of a generic HTTP tool when a header or body needs a value the model sees as a double-brace LABEL token. " +
           "The response body is masked again before it is returned.",
         {
           type: "object",

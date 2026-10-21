@@ -1,7 +1,7 @@
 import type { ShieldConfig } from "./config.js";
 import { applyMatches, detectMatches, type Match } from "./detect.js";
 import type { ContentBlock, JsonValue, Message, ReasoningBlock, TextBlock, ToolCallBlock, ToolResultBlock } from "./types.js";
-import { containsToken } from "./tokens.js";
+import { containsToken, TOKEN_RE } from "./tokens.js";
 import type { Vault } from "./vault.js";
 
 function maskedPlaceholder(label: string): string {
@@ -195,6 +195,21 @@ export function containsTokenDeep(value: unknown): boolean {
   if (Array.isArray(value)) return value.some((item) => containsTokenDeep(item));
   if (value !== null && typeof value === "object") {
     return Object.values(value as Record<string, unknown>).some((item) => containsTokenDeep(item));
+  }
+  return false;
+}
+
+/** True when any string contains a token this vault can resolve. */
+export function containsKnownTokenDeep(value: unknown, vault: Vault): boolean {
+  if (typeof value === "string") {
+    for (const match of value.matchAll(TOKEN_RE)) {
+      if (vault.has(match[0])) return true;
+    }
+    return false;
+  }
+  if (Array.isArray(value)) return value.some((item) => containsKnownTokenDeep(item, vault));
+  if (value !== null && typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).some((item) => containsKnownTokenDeep(item, vault));
   }
   return false;
 }
